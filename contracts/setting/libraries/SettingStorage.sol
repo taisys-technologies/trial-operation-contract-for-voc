@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.12;
 
 library SettingStorage {
+    struct IntStruct {
+        int256 value;
+        bool status;
+    }
+
     struct UintStruct {
         uint256 value;
         bool status;
@@ -13,11 +18,18 @@ library SettingStorage {
         bool status;
     }
 
+    struct StringStruct {
+        string value;
+        bool status;
+    }
+
+    struct DataStruct {
+        bytes value;
+        bool status;
+    }
+
     struct SettingSlot {
-        // uint mapping
-        mapping(address => mapping(bytes32 => UintStruct)) _uintMap;
-        // address mapping
-        mapping(address => mapping(bytes32 => AddressStruct)) _addressMap;
+        mapping(address => mapping(bytes32 => DataStruct)) _dataMap;
     }
 
     bytes32 internal constant SLOT_KEY_Setting =

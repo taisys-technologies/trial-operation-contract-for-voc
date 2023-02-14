@@ -7,10 +7,6 @@ interface ISetting {
         bool status;
     }
 
-    // function getUint(address wallet, string memory key)
-    //     external
-    //     returns (uint256);
-
     function checkUint(address wallet, string memory key)
         external
         view

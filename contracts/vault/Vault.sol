@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.4;
+pragma solidity 0.8.12;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
@@ -391,14 +391,12 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
         string memory key
     ) internal pure returns (string memory) {
         return
-            string(
-                abi.encodePacked(
-                    prefixString,
-                    "_",
-                    Strings.toHexString(erc20),
-                    "_",
-                    key
-                )
+            string.concat(
+                prefixString,
+                "_",
+                Strings.toHexString(erc20),
+                "_",
+                key
             );
     }
 
@@ -613,39 +611,22 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
         string memory opcode
     ) internal {
         VaultStorage.VaultSlot storage data = VaultStorage.getVaultSlot();
-        ISetting.UintStruct memory largeAmount = _getLargeAmount(erc20);
 
         if (!data._erc20List.contains(erc20)) {
             revert(Errors.NOT_SUPPORTED_ERC20);
         }
-        if (!largeAmount.status) {
-            revert(Errors.INVALID_LARGE_AMOUNT);
-        }
-
-        if (amount >= largeAmount.value) {
-            _largeAmountTransfer(to);
-        } else {
-            _smallAmountTransfer(to, erc20, amount);
-        }
-
-        IERC20(erc20).safeTransfer(to, amount);
-
-        emit Transfer(to, erc20, amount, opcode);
-    }
-
-    /**
-     * @dev check large amount transfer is valid
-     * @param to - the address that erc20 transfer to
-     */
-    function _largeAmountTransfer(address to) internal view {
-        VaultStorage.VaultSlot storage data = VaultStorage.getVaultSlot();
 
         if (
-            !data._trustedToList.contains(to) &&
-            !hasRole(NO_LIMIT_TRANSFER_ROLE, _msgSender())
+            data._trustedToList.contains(to) ||
+            hasRole(NO_LIMIT_TRANSFER_ROLE, _msgSender())
         ) {
-            revert(Errors.NO_LARGE_TRANSFER_PERMISSION);
+            IERC20(erc20).safeTransfer(to, amount);
+        } else {
+            _smallAmountTransfer(to, erc20, amount);
+            IERC20(erc20).safeTransfer(to, amount);
         }
+
+        emit Transfer(to, erc20, amount, opcode);
     }
 
     /**
@@ -665,11 +646,18 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
         );
         ISetting.UintStruct memory maxAmountPerDay = _getMaxAmountPerDay(erc20);
         ISetting.UintStruct memory maxCountPerDay = _getMaxCountPerDay(erc20);
+        ISetting.UintStruct memory largeAmount = _getLargeAmount(erc20);
         uint256 current = block.timestamp;
 
         // get wallet currently record
         uint256 currentAmount = data._amountRecords[to][current / 1 days];
         uint256 currentFrequency = data._frequencyRecords[to][current / 1 days];
+
+        // check if amount is smaller than large_amount
+        // if large_amount not exist, than it's equal to 0
+        if (!largeAmount.status || largeAmount.value <= amount) {
+            revert(Errors.INVALID_TRANSFER);
+        }
 
         if (!data._toList.contains(to) && data._toList.length() != 0) {
             revert(Errors.INVALID_TO_ADDRESS);
