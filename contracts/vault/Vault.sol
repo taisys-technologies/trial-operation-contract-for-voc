@@ -3,6 +3,7 @@ pragma solidity 0.8.12;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -25,14 +26,10 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
      **********/
 
     event SetErc20List(address[] erc20AddressList);
-    event SetToList(address[] toAddressList);
-    event SetTrustedToList(address[] trustedToAddressList);
+    event SetToListMerkleRoot(bytes32 toListMerkleRoot);
+    event SetTrustedToListMerkleRoot(bytes32 trustedToListMerkleRoot);
     event AddErc20List(address erc20Address);
-    event AddToList(address toAddress);
-    event AddTrustedToList(address trustedToAddress);
     event DelErc20List(address erc20Address);
-    event DelToList(address toAddress);
-    event DelTrustedToToList(address trustedToAddress);
     event SetConfigAddress(address config);
     event SetParamAddress(address param);
     event Transfer(address to, address erc20, uint256 amount, string opcode);
@@ -49,12 +46,12 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
         address newParam,
         string memory newPrefix,
         address[] memory newErc20List,
-        address[] memory newToList,
-        address[] memory newTrustedToList
+        bytes32 newToListMerkleRoot,
+        bytes32 newTrustedToListMerkleRoot
     ) AccessControlCustom(newAdmin, newSetter, newNoLimitTransfer) {
         _setErc20List(newErc20List);
-        _setToList(newToList);
-        _setTrustedToList(newTrustedToList);
+        _setToListMerkleRoot(newToListMerkleRoot);
+        _setTrustedToListMerkleRoot(newTrustedToListMerkleRoot);
         _setConfigAddress(newConfig);
         _setParamAddress(newParam);
         VaultStorage.getVaultSlot()._prefix = newPrefix;
@@ -142,33 +139,17 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
     }
 
     /**
-     * @dev return to list
+     * @dev return merkle tree root of to list
      */
-    function getToList() external view returns (address[] memory) {
-        EnumerableSet.AddressSet storage data = VaultStorage
-            .getVaultSlot()
-            ._toList;
-        uint256 length = data.length();
-        address[] memory res = new address[](length);
-        for (uint256 i = 0; i < length; i++) {
-            res[i] = data.at(i);
-        }
-        return res;
+    function getToListMerkleRoot() external view returns (bytes32) {
+        return VaultStorage.getVaultSlot()._toList;
     }
 
     /**
-     * @dev return trustedTo list
+     * @dev return merkle tree root of trustedTo list
      */
-    function getTrustedToList() external view returns (address[] memory) {
-        EnumerableSet.AddressSet storage data = VaultStorage
-            .getVaultSlot()
-            ._trustedToList;
-        uint256 length = data.length();
-        address[] memory res = new address[](length);
-        for (uint256 i = 0; i < length; i++) {
-            res[i] = data.at(i);
-        }
-        return res;
+    function getTrustedToListMerkleRoot() external view returns (bytes32) {
+        return VaultStorage.getVaultSlot()._trustedToList;
     }
 
     /**
@@ -184,27 +165,27 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
     }
 
     /**
-     * @dev set address list to to list
-     * @param newToAddressList - new to address list
+     * @dev set merkle tree root of to list
+     * @param newToListMerkleRoot - new merkle tree root of to list
      * @notice - Only SETTER_ROLE can call this function
      */
-    function setToList(address[] memory newToAddressList)
+    function setToListMerkleRoot(bytes32 newToListMerkleRoot)
         external
         onlyRole(SETTER_ROLE)
     {
-        _setToList(newToAddressList);
+        _setToListMerkleRoot(newToListMerkleRoot);
     }
 
     /**
-     * @dev set address list to trustedTo list
-     * @param newTrustedToAddressList - new trustedTo address list
+     * @dev set merkle tree root of trustedTo list
+     * @param newTrustedToListMerkleRoot - new merkle tree root of trustedTo list
      * @notice - Only SETTER_ROLE can call this function
      */
-    function setTrustedToList(address[] memory newTrustedToAddressList)
+    function setTrustedToListMerkleRoot(bytes32 newTrustedToListMerkleRoot)
         external
         onlyRole(SETTER_ROLE)
     {
-        _setTrustedToList(newTrustedToAddressList);
+        _setTrustedToListMerkleRoot(newTrustedToListMerkleRoot);
     }
 
     /**
@@ -220,54 +201,12 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
     }
 
     /**
-     * @dev add address to to list
-     * @param newToAddress - new to address
-     * @notice - Only SETTER_ROLE can call this function
-     */
-    function addToList(address newToAddress) external onlyRole(SETTER_ROLE) {
-        _addToList(newToAddress);
-    }
-
-    /**
-     * @dev add address to trustedTo list
-     * @param newTrustedToList - new trustedTo address
-     * @notice - Only SETTER_ROLE can call this function
-     */
-    function addTrustedToList(address newTrustedToList)
-        external
-        onlyRole(SETTER_ROLE)
-    {
-        _addTrustedToList(newTrustedToList);
-    }
-
-    /**
      * @dev delete address from erc20 list
      * @param erc20Address - erc20Address to be removed
      * @notice - Only SETTER_ROLE can call this function
      */
     function delErc20List(address erc20Address) external onlyRole(SETTER_ROLE) {
         _delErc20List(erc20Address);
-    }
-
-    /**
-     * @dev delete address from to list
-     * @param toAddress - toAddress to be removed
-     * @notice - Only SETTER_ROLE can call this function
-     */
-    function delToList(address toAddress) external onlyRole(SETTER_ROLE) {
-        _delToList(toAddress);
-    }
-
-    /**
-     * @dev delete address from trustedTo list
-     * @param trustedToAddress - trustedToAddress to be removed
-     * @notice - Only SETTER_ROLE can call this function
-     */
-    function delTrustedToList(address trustedToAddress)
-        external
-        onlyRole(SETTER_ROLE)
-    {
-        _delTrustedToList(trustedToAddress);
     }
 
     /**
@@ -297,14 +236,18 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
      * @param erc20 - the token of transfer
      * @param amount - the amount of transfer
      * @param opcode - the opcode of transfer
+     * @param toProof - the proof of toList
+     * @param trustedToProof - the proof of trustedToList
      */
     function transfer(
         address to,
         address erc20,
         uint256 amount,
-        string memory opcode
+        string memory opcode,
+        bytes32[] memory toProof,
+        bytes32[] memory trustedToProof
     ) external {
-        _transfer(to, erc20, amount, opcode);
+        _transfer(to, erc20, amount, opcode, toProof, trustedToProof);
     }
 
     /**********************
@@ -428,59 +371,23 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
     }
 
     /**
-     * @dev set address list to to list
-     * @param newToAddressList - new to address list
+     * @dev set merkle tree root of to list
+     * @param newToListMerkleRoot - new merkle tree root of to list
      */
-    function _setToList(address[] memory newToAddressList) internal {
-        if (newToAddressList.length > VaultStorage._WHITELISTLENGTH) {
-            revert(Errors.LIST_TO_LONG);
-        }
-        EnumerableSet.AddressSet storage data = VaultStorage
-            .getVaultSlot()
-            ._toList;
-        uint256 length = data.length();
-
-        if (length > 0) {
-            // delete old data
-            for (uint256 i = length; i > 0; i--) {
-                _delToList(data.at(i - 1));
-            }
-        }
-
-        // set new data
-        for (uint256 i = 0; i < newToAddressList.length; i++) {
-            _addToList(newToAddressList[i]);
-        }
-        emit SetToList(newToAddressList);
+    function _setToListMerkleRoot(bytes32 newToListMerkleRoot) internal {
+        VaultStorage.getVaultSlot()._toList = newToListMerkleRoot;
+        emit SetToListMerkleRoot(newToListMerkleRoot);
     }
 
     /**
-     * @dev set address list to trustedTo list
-     * @param newTrustedToAddressList - new trustedTo address list
+     * @dev set merkle tree root of trustedTo list
+     * @param newTrustedToListMerkleRoot - new merkle tree root of trustedTo list
      */
-    function _setTrustedToList(address[] memory newTrustedToAddressList)
+    function _setTrustedToListMerkleRoot(bytes32 newTrustedToListMerkleRoot)
         internal
     {
-        if (newTrustedToAddressList.length > VaultStorage._WHITELISTLENGTH) {
-            revert(Errors.LIST_TO_LONG);
-        }
-        EnumerableSet.AddressSet storage data = VaultStorage
-            .getVaultSlot()
-            ._trustedToList;
-        uint256 length = data.length();
-
-        if (length > 0) {
-            // delete old data
-            for (uint256 i = length; i > 0; i--) {
-                _delTrustedToList(data.at(i - 1));
-            }
-        }
-
-        // set new data
-        for (uint256 i = 0; i < newTrustedToAddressList.length; i++) {
-            _addTrustedToList(newTrustedToAddressList[i]);
-        }
-        emit SetTrustedToList(newTrustedToAddressList);
+        VaultStorage.getVaultSlot()._trustedToList = newTrustedToListMerkleRoot;
+        emit SetTrustedToListMerkleRoot(newTrustedToListMerkleRoot);
     }
 
     /**
@@ -505,72 +412,12 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
     }
 
     /**
-     * @dev add address to to list
-     * @param newToAddress - new to address
-     */
-    function _addToList(address newToAddress) internal {
-        EnumerableSet.AddressSet storage data = VaultStorage
-            .getVaultSlot()
-            ._toList;
-        if (newToAddress == address(0)) {
-            revert(Errors.ZERO_ADDRESS);
-        }
-        if (data.contains(newToAddress)) {
-            revert(Errors.DUPLICATED_ADDRESS);
-        }
-        if (data.length() >= VaultStorage._WHITELISTLENGTH) {
-            revert(Errors.LIST_EXCEED_LENGTH_LIMIT);
-        }
-        data.add(newToAddress);
-        emit AddToList(newToAddress);
-    }
-
-    /**
-     * @dev add address to trustedTo list
-     * @param newTrustedToList - new trustedTo address
-     */
-    function _addTrustedToList(address newTrustedToList) internal {
-        EnumerableSet.AddressSet storage data = VaultStorage
-            .getVaultSlot()
-            ._trustedToList;
-        if (newTrustedToList == address(0)) {
-            revert(Errors.ZERO_ADDRESS);
-        }
-        if (data.contains(newTrustedToList)) {
-            revert(Errors.DUPLICATED_ADDRESS);
-        }
-        if (data.length() >= VaultStorage._WHITELISTLENGTH) {
-            revert(Errors.LIST_EXCEED_LENGTH_LIMIT);
-        }
-        data.add(newTrustedToList);
-        emit AddTrustedToList(newTrustedToList);
-    }
-
-    /**
      * @dev delete address from erc20 list
      * @param erc20Address - erc20Address to be removed
      */
     function _delErc20List(address erc20Address) internal {
         VaultStorage.getVaultSlot()._erc20List.remove(erc20Address);
         emit DelErc20List(erc20Address);
-    }
-
-    /**
-     * @dev delete address from to list
-     * @param toAddress - toAddress to be removed
-     */
-    function _delToList(address toAddress) internal {
-        VaultStorage.getVaultSlot()._toList.remove(toAddress);
-        emit DelToList(toAddress);
-    }
-
-    /**
-     * @dev delete address from trustedTo list
-     * @param trustedToAddress - trustedToAddress to be removed
-     */
-    function _delTrustedToList(address trustedToAddress) internal {
-        VaultStorage.getVaultSlot()._trustedToList.remove(trustedToAddress);
-        emit DelTrustedToToList(trustedToAddress);
     }
 
     /**
@@ -608,7 +455,9 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
         address to,
         address erc20,
         uint256 amount,
-        string memory opcode
+        string memory opcode,
+        bytes32[] memory toProof,
+        bytes32[] memory trustedToProof
     ) internal {
         VaultStorage.VaultSlot storage data = VaultStorage.getVaultSlot();
 
@@ -616,13 +465,15 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
             revert(Errors.NOT_SUPPORTED_ERC20);
         }
 
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(to))));
+
         if (
-            data._trustedToList.contains(to) ||
+            MerkleProof.verify(trustedToProof, data._trustedToList, leaf) ||
             hasRole(NO_LIMIT_TRANSFER_ROLE, _msgSender())
         ) {
             IERC20(erc20).safeTransfer(to, amount);
         } else {
-            _smallAmountTransfer(to, erc20, amount);
+            _smallAmountTransfer(to, erc20, amount, toProof);
             IERC20(erc20).safeTransfer(to, amount);
         }
 
@@ -638,7 +489,8 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
     function _smallAmountTransfer(
         address to,
         address erc20,
-        uint256 amount
+        uint256 amount,
+        bytes32[] memory toProof
     ) internal {
         VaultStorage.VaultSlot storage data = VaultStorage.getVaultSlot();
         ISetting.UintStruct memory maxAmountPerCount = _getMaxAmountPerCount(
@@ -659,7 +511,11 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
             revert(Errors.INVALID_TRANSFER);
         }
 
-        if (!data._toList.contains(to) && data._toList.length() != 0) {
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(to))));
+        if (
+            data._toList != bytes32(0) &&
+            !MerkleProof.verify(toProof, data._toList, leaf)
+        ) {
             revert(Errors.INVALID_TO_ADDRESS);
         }
 

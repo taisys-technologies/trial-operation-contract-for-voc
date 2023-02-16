@@ -15,8 +15,8 @@ library VaultStorage {
         address _config;
         address _param;
         EnumerableSet.AddressSet _erc20List;
-        EnumerableSet.AddressSet _toList;
-        EnumerableSet.AddressSet _trustedToList;
+        bytes32 _toList;
+        bytes32 _trustedToList;
         mapping(address => mapping(uint256 => uint256)) _amountRecords;
         mapping(address => mapping(uint256 => uint256)) _frequencyRecords;
     }
