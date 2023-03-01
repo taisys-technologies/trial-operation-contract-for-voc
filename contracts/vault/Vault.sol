@@ -42,13 +42,21 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
         address newAdmin,
         address[] memory newSetter,
         address[] memory newNoLimitTransfer,
+        address[] memory newSmallAmountTransfer,
         address newConfig,
         address newParam,
         string memory newPrefix,
         address[] memory newErc20List,
         bytes32 newToListMerkleRoot,
         bytes32 newTrustedToListMerkleRoot
-    ) AccessControlCustom(newAdmin, newSetter, newNoLimitTransfer) {
+    )
+        AccessControlCustom(
+            newAdmin,
+            newSetter,
+            newNoLimitTransfer,
+            newSmallAmountTransfer
+        )
+    {
         _setErc20List(newErc20List);
         _setToListMerkleRoot(newToListMerkleRoot);
         _setTrustedToListMerkleRoot(newTrustedToListMerkleRoot);
@@ -472,9 +480,11 @@ contract Vault is AccessControlCustom, ReentrancyGuard {
             hasRole(NO_LIMIT_TRANSFER_ROLE, _msgSender())
         ) {
             IERC20(erc20).safeTransfer(to, amount);
-        } else {
+        } else if (hasRole(SMALL_AMOUNT_TRANSFER_ROLE, _msgSender())) {
             _smallAmountTransfer(to, erc20, amount, toProof);
             IERC20(erc20).safeTransfer(to, amount);
+        } else {
+            revert(Errors.FORBIDDEN);
         }
 
         emit Transfer(to, erc20, amount, opcode);

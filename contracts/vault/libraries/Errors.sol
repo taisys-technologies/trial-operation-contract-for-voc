@@ -14,6 +14,7 @@ library Errors {
     string internal constant OVER_MAX_AMOUNT_PER_DAY = "Vault_107";
     string internal constant OVER_MAX_COUNT_PER_DAY = "Vault_108";
     string internal constant LIST_EXCEED_LENGTH_LIMIT = "Vault_109";
+    string internal constant FORBIDDEN = "Vault_110";
     // Vault AccessControl errors
     string internal constant NOT_IN_TRANSITION = "Vault_201";
     string internal constant ALREADY_IN_TRANSITION = "Vault_202";
